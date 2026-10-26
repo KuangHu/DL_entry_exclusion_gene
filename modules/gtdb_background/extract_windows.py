@@ -231,6 +231,8 @@ def extract(download_manifest,out,positive_panel=None,minimum=40,maximum=300,per
                 source_mode=source_mode,
                 source_file_sha256=assembly.get('gbff_sha256') or assembly.get('protein_faa_sha256',''),
                 genes=genes)
+            if source_mode=='ncbi-r232':
+                case['source_gbff_sha256']=assembly['gbff_sha256'] # Preserve the original provenance column.
             cases.append(case)
             if aid not in groups:groups[aid]=dict(architecture_id=aid,cases=[],center_frequencies=Counter(),positions=[dict(relative_cds=x['relative_cds'],identity_label=arch_token(x),relative_strand=x['relative_strand'],valid=0,excluded=0,missing=0,seqs=set()) for x in genes])
             ag=groups[aid];ag['cases'].append(cid);ag['center_frequencies'][g['sequence_sha256']]+=1

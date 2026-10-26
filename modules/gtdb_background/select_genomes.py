@@ -40,7 +40,9 @@ def select(metadata,out,count=20,seed='gtdb-background-v1',source='ncbi-r232'):
             counts['eligible']+=1
             accession_prefix=next(p for p in spec['accept_prefix'] if r['accession'].startswith(p))
             assembly_accession=r['accession'][len(accession_prefix):]
-            rank=hashlib.sha256((seed+'|'+r['accession']).encode()).hexdigest()
+            # Preserve the original R232 sampling order; R214 uses its source prefix.
+            rank_accession=assembly_accession if source=='ncbi-r232' else r['accession']
+            rank=hashlib.sha256((seed+'|'+rank_accession).encode()).hexdigest()
             row=dict(gtdb_accession=r['accession'],assembly_accession=assembly_accession,accession_prefix=accession_prefix,
                      gtdb_taxonomy=r['gtdb_taxonomy'],phylum=taxa.get('p',''),taxonomic_class=taxa['c'],
                      genus=taxa['g'],species=taxa.get('s',''),

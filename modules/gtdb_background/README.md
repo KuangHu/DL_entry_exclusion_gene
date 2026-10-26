@@ -28,8 +28,8 @@ hosts GTDB R214 skip all downloads.
 
 | `--source` | Metadata | Center+neighbor source | Product/gene names | Needs network | Needs disk |
 |---|---|---|---|---|---|
-| `ncbi-r232` (default) | R232 bac120 (pinned URL + MD5) | NCBI RefSeq GBFF per selected accession | yes | yes (prepare only) | tens of MB |
-| `local-r214` | R214 `bac120_metadata_r214.tsv` from a staged release | GTDB R214 Prodigal `.faa` files | **no — Prodigal headers only** | no | zero (reads shared release in place) |
+| `ncbi-r232` (default) | R232 bac120 (pinned URL + MD5) | NCBI RefSeq GBFF per selected accession | yes | yes (prepare only) | ~276 MiB metadata plus selected assembly packages, GBFF and outputs |
+| `local-r214` | R214 `bac120_metadata_r214.tsv` from a staged release | GTDB R214 Prodigal `.faa` files | **no — Prodigal headers only** | no | provenance and outputs only; source FASTAs are read in place |
 
 ### `local-r214` mode
 
@@ -55,7 +55,8 @@ Important differences from `ncbi-r232`:
   the two sets are not identical. Don't compare case counts across modes as if they
   were runs of the same pipeline.
 - `product` and `gene` are empty for every record; `source_unknown=True` always;
-  `source_annotation_review` on every case/audit row is `unavailable`. This is
+  `source_annotation_review` on every case and `annotation_review` on every audit
+  row are `unavailable`. This is
   distinct from "nothing matched" — the review was never possible. Treating absence
   of a product name as evidence of EEX exclusion (positive or negative) is unsound.
 - Architectures still group by `(identity_label, relative_strand)`, but every token
@@ -151,7 +152,7 @@ match filter. No homology screening is performed. All cases remain unlabeled.
 
 The portable Python entry point also works on Windows. Individual tools expose `--help`.
 
-## Selection and extraction
+## NCBI R232 selection and extraction
 
 1. Select GTDB bacterial species representatives with RefSeq accessions, Complete Genome assembly level, CheckM2 completeness ≥95 and contamination ≤5, and no MAG/SAG/environmental-assembly category.
 2. Sample classes deterministically, with one assembly per genus. This is a diversity pilot, not a population-weighted or EEX-taxonomy-matched sample.
@@ -179,7 +180,7 @@ The standard length strata are bounded by 80, 120 and 200 aa, clipped to the con
 | center_sampling_audit.tsv | Short centers and reasons for sampling, exclusion or nonselection |
 | selected_assemblies.tsv | Exact assembly selection and taxonomy |
 | download_manifest.json | Source locations, exact accessions and checksums |
-| validation.json | Verification against original GBFF coordinates and translations |
+| validation.json | Verification against original GBFF or Prodigal FASTA coordinates and translations |
 
 **negative_label remains null** and **experimental_negative remains false** for every case. Function-annotated and uncharacterized centers remain separate evidence groups. Conjugation/exclusion annotation text in a window is retained as a review flag; its absence does not establish biological absence.
 
@@ -187,7 +188,7 @@ A copy is one sampled center occurrence, not an independent biological replicate
 
 ## Validation and next use
 
-The edge-case tests cover reverse-strand indexing, linear edges, circular wrapping, tiny circular contigs, invalid CDS positions and partial annotations. Report generation independently checks every window against the original GBFF, verifies valid FASTA sequences, and checks nonoverlap and architecture counts.
+The edge-case tests cover reverse-strand indexing, linear edges, circular wrapping, tiny circular contigs, invalid CDS positions and partial annotations. Report generation re-reads the original GBFF or Prodigal FASTA, verifies valid protein sequences, and checks nonoverlap and architecture counts. Tests also run a small synthetic R214 dataset through the complete offline pipeline and report generation.
 
 Before comparing EEX embeddings, match taxonomy, length, signal peptides, topology and window visibility. This pilot's full windows differ from the truncated windows in the earlier EEX dataset. Gene-calling and annotation differences are also potential confounders. Near-homolog grouping, phenotype-negative validation and center ESM/SignalP/topology calculations are outside this extraction stage.
 

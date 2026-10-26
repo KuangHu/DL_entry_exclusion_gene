@@ -46,7 +46,7 @@ def _validate_local_r214(download_row,byassembly,manifest,central,fasta,flank,us
             assert i is not None and g['cds_index']==i and g['relative_cds']==rel and g['wrapped_origin']==wrapped==False
             key=(c['assembly_accession'],c['contig'],i);assert key not in used;used.add(key)
             raw=rec['genes'][i]
-            for field in ['start0','end0','strand','sequence_status','sequence_sha256']:assert g[field]==raw[field],(key,field)
+            for field in ['start0','end0','strand','sequence_status','sequence_sha256','prodigal_partial','prodigal_ordinal']:assert g[field]==raw[field],(key,field)
             assert g['annotation_review']=='unavailable' and g['source_unknown'] is True
             if g['sequence_status']=='valid':assert fasta[g['sequence_id']]==raw['sequence']
             else:assert g['sequence_id']==''
@@ -127,6 +127,20 @@ def build(out):
                   if source_mode=='local-r214'
                   else '抽样覆盖 @@PHYLA@@ 个门；从相应 NCBI 注释中取短蛋白及邻域。这些蛋白是 <b>NCBI 的基因调用与注释</b>，并非 GTDB 批量 Prodigal 蛋白集。')
     page=HTML.replace('@@SOURCE_BANNER@@',source_banner).replace('@@SOURCE_BLURB@@',source_blurb)
+    checked=manifest['known_EEX_exact_sequences_checked']
+    page=page.replace('@@POSITIVE_SCREEN@@',
+        f'中心已与项目中 {checked:,} 条 EEX 相关完整序列做精确相同检查；近同源筛查尚未运行。' if checked
+        else '未提供可用的已知正例哈希面板，未执行已知 EEX 精确匹配排除；近同源筛查尚未运行。')
+    if source_mode=='local-r214':
+        page=page.replace('@@CONTEXT_REVIEW@@','源功能注释审查不可用：Prodigal 文件没有产品或基因功能名称，因此不能报告“未见接合 / exclusion 文字标记”。如提供正例面板，邻居与已知正例的精确匹配仍会保留为复核标记。')
+        page=page.replace('@@CIRCULAR_POLICY@@','原始 FASTA 不提供拓扑证据；环状与否未知，所有窗口均按线性边界处理，关闭跨原点。')
+        page=page.replace('@@CACHE_POLICY@@','本地源文件保留原始文件 SHA256、解析记录校验值及重复文件来源；不执行下载，也没有 GTDB 官方 MD5 校验。')
+        page=page.replace('@@REVIEW_OPTIONS@@','<option value="unavailable">源功能注释审查不可用</option><option value="true">有精确匹配复核标记</option>')
+    else:
+        page=page.replace('@@CONTEXT_REVIEW@@','@@REVIEW@@ 个抽样窗口含源注释文字或已知正例精确匹配标记，单独保留为复核层；未做新的功能推断。其余窗口的“未见标记”不能证明相关功能不存在。')
+        page=page.replace('@@CIRCULAR_POLICY@@','只有源记录明确标注环状且 CDS 足够多时才跨原点取邻居。')
+        page=page.replace('@@CACHE_POLICY@@','下载缓存保留固定版本、原始注释、文件 SHA256 和 GTDB 元数据的官方 MD5 校验。')
+        page=page.replace('@@REVIEW_OPTIONS@@','<option value="true">有标记</option><option value="false">未见标记</option>')
     page=page.replace('@@GENOME_ROWS@@',rows).replace('@@CASES@@',str(len(windows))).replace('@@GENOMES@@',str(len(byassembly))).replace('@@FASTA@@',str(len(fasta))).replace('@@EXCLUDED@@',str(excluded)).replace('@@UNCERTAIN@@',str(evidence.get('source_function_uncharacterized',0))).replace('@@ANNOTATED@@',str(evidence.get('source_function_annotated',0))).replace('@@PARTIAL@@',str(manifest['cases_with_unavailable_neighbor_sequences'])).replace('@@REVIEW@@',str(manifest['context_review_cases'])).replace('@@PHYLA@@',str(selection['phyla'])).replace('@@ARCH@@',str(len(arch))).replace('@@RELEASE@@',release_label).replace('@@QUALITY@@',selection.get('quality_label','CheckM2'))
     page=page.replace('±7 CDS','±'+str(flank)+' CDS').replace('40–300 aa',str(manifest['min_aa'])+'–'+str(manifest['max_aa'])+' aa').replace('20 个实际使用的组装',str(len(byassembly))+' 个实际使用的组装').replace('每个基因组最多取 20 个中心','每个基因组最多取 '+str(manifest['per_genome_cap'])+' 个中心').replace('1,047 条 EEX',str(manifest['known_EEX_exact_sequences_checked'])+' 条 EEX').replace('完整的 15 个 CDS','完整的 '+str(2*flank+1)+' 个 CDS').replace('400 个中心蛋白',str(len(windows))+' 个中心蛋白')
     snapshot=out/'pipeline';snapshot.mkdir(exist_ok=True)
@@ -166,9 +180,9 @@ function card(c){
   const a=architectures[c.architecture_id],freq=Object.entries(a.center_frequency_distribution).map(([n,k])=>k+' × '+n).join('；');
   const review=c.source_annotation_review==='unavailable'?'不适用（Prodigal 源无功能注释）':(c.context_annotation_review?'有':'未见');
   const archNote=a.architecture_identity_note?('<p class="muted" style="font-size:12px">架构说明：'+esc(a.architecture_identity_note)+'</p>'):'';
-  return '<article class="card"><h3>'+esc(c.case_id)+' · '+esc(c.genus)+' <small>'+esc(c.architecture_id)+'</small></h3><p><b>中心 '+c.center_aa_length+' aa · '+esc(c.center_gene||c.center_product||'unknown')+'</b></p><p>源注释：'+(c.center_evidence==='source_function_annotated'?'有功能描述':'功能未明')+'；窗口文字标记复核：'+review+'；负标签：未赋予。</p><p>架构 copies '+a.copies+'；中心完整 aa '+a.distinct_center_aa+' 种；频率（序列数 × 出现次数）：'+freq+'</p>'+archNote+'<div class="scroll">'+draw(c,a)+'</div><p class="muted">'+esc(c.assembly_accession)+' · '+esc(c.contig)+' · CDS index '+c.center_cds+'（0-based） · '+(c.contig_circular?'源记录标注为环状':'线性记录')+' · '+esc(c.replicon)+' · source='+esc(c.source_mode||'ncbi-r232')+'</p><details><summary>完整源注释与分类</summary><p>'+esc(c.gtdb_taxonomy)+'</p><table><thead><tr><th>相对 CDS</th><th>Gene / locus</th><th>原始 product</th><th>序列状态</th></tr></thead><tbody>'+c.genes.map(g=>'<tr><td>'+g.relative_cds+'</td><td>'+esc(g.gene||g.locus_tag||'')+'</td><td>'+esc(g.product||'未提供')+'</td><td>'+esc(g.sequence_status)+'</td></tr>').join('')+'</tbody></table></details></article>';
+  return '<article class="card"><h3>'+esc(c.case_id)+' · '+esc(c.genus)+' <small>'+esc(c.architecture_id)+'</small></h3><p><b>中心 '+c.center_aa_length+' aa · '+esc(c.center_gene||c.center_product||'unknown')+'</b></p><p>源注释：'+(c.center_evidence==='source_function_annotated'?'有功能描述':'功能未明')+'；窗口文字标记复核：'+review+'；负标签：未赋予。</p><p>架构 copies '+a.copies+'；中心完整 aa '+a.distinct_center_aa+' 种；频率（序列数 × 出现次数）：'+freq+'</p>'+archNote+'<div class="scroll">'+draw(c,a)+'</div><p class="muted">'+esc(c.assembly_accession)+' · '+esc(c.contig)+' · CDS index '+c.center_cds+'（0-based） · '+(c.source_mode==='local-r214'?'拓扑未知；按线性窗口处理':c.contig_circular?'源记录标注为环状':'未标注环状；按线性窗口处理')+' · '+esc(c.replicon)+' · source='+esc(c.source_mode||'ncbi-r232')+'</p><details><summary>完整源注释与分类</summary><p>'+esc(c.gtdb_taxonomy)+'</p><table><thead><tr><th>相对 CDS</th><th>Gene / locus</th><th>原始 product</th><th>序列状态</th></tr></thead><tbody>'+c.genes.map(g=>'<tr><td>'+g.relative_cds+'</td><td>'+esc(g.gene||g.locus_tag||'')+'</td><td>'+esc(g.product||'未提供')+'</td><td>'+esc(g.sequence_status)+'</td></tr>').join('')+'</tbody></table></details></article>';
 }
-function filtered(){const q=query.value.trim().toLowerCase();return cases.filter(c=>(!genus.value||c.genus===genus.value)&&(!evidence.value||c.center_evidence===evidence.value)&&(!review.value||String(c.context_annotation_review)===review.value)&&(!q||[c.case_id,c.contig,c.assembly_accession,c.architecture_id,...c.genes.map(g=>(g.gene||'')+' '+(g.product||'')+' '+(g.locus_tag||''))].join(' ').toLowerCase().includes(q)));}
+function filtered(){const q=query.value.trim().toLowerCase();return cases.filter(c=>(!genus.value||c.genus===genus.value)&&(!evidence.value||c.center_evidence===evidence.value)&&(!review.value||(review.value==='unavailable'?c.source_annotation_review==='unavailable':review.value==='false'?c.source_annotation_review!=='unavailable'&&!c.context_annotation_review:String(c.context_annotation_review)===review.value))&&(!q||[c.case_id,c.contig,c.assembly_accession,c.architecture_id,...c.genes.map(g=>(g.gene||'')+' '+(g.product||'')+' '+(g.locus_tag||''))].join(' ').toLowerCase().includes(q)));}
 function render(){const a=filtered(),n=Math.max(1,Math.ceil(a.length/10));page=Math.min(page,n-1);document.getElementById('cards').innerHTML=a.slice(page*10,(page+1)*10).map(card).join('')||'<p>没有匹配的抽样记录。</p>';document.getElementById('count').textContent=a.length+' 个窗口 · '+(page+1)+' / '+n+' 页';document.getElementById('prev').disabled=page===0;document.getElementById('next').disabled=page>=n-1;}
 [genus,evidence,review].forEach(e=>e.addEventListener('change',()=>{page=0;render();}));query.addEventListener('input',()=>{page=0;render();});
 document.getElementById('prev').addEventListener('click',()=>{page--;render();document.getElementById('atlas').scrollIntoView();});document.getElementById('next').addEventListener('click',()=>{page++;render();document.getElementById('atlas').scrollIntoView();});render();
@@ -181,18 +195,18 @@ HTML=r'''<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta nam
 <nav><a href="#design">抽样设计</a> · <a href="#atlas">全部窗口图集</a> · <a href="#files">代码与数据</a></nav>
 <section id="design"><h2>这批数据回答"能否构建外部背景"，尚未回答识别效果</h2>
 <p>固定 GTDB @@RELEASE@@ 的分类与组装编号，筛选物种代表、完整组装、@@QUALITY@@ 完整度 ≥95、污染度 ≤5、非 MAG/SAG 类别。按分类阶元轮流抽样并限制每属一份；再从相应源文件中取短蛋白及邻域。</p>
-<p>每个基因组最多取 20 个中心，按长度区间分层、固定种子和 SHA256 顺序选择。全局排除完全重复的中心序列；同一 contig 内，选定窗口不共享 CDS。中心已与项目中 1,047 条 EEX 相关完整序列做精确相同检查；近同源筛查尚未运行。</p>
+<p>每个基因组最多取 20 个中心，按长度区间分层、固定种子和 SHA256 顺序选择。全局排除完全重复的中心序列；同一 contig 内，选定窗口不共享 CDS。@@POSITIVE_SCREEN@@</p>
 <figure><img src="sampling_overview.png" alt="短蛋白长度、源注释证据和邻居序列可用性"><figcaption>这是分层抽样后的分布，不能解释为自然界的出现频率。@@ANNOTATED@@ 个中心有源功能描述，@@UNCERTAIN@@ 个功能未明；二者都没有被赋予实验阴性标签。</figcaption></figure>
 <div class="note"><b>保持比较公平：</b>这批基因组分类跨度大，且所有窗口都有完整的 15 个 CDS 位置。现有 EEX 数据的许多窗口被截断。后续需要匹配分类、长度、膜特征和窗口可见性，防止模型仅凭分类差异或裁剪方式区分两组。</div>
-<p>@@PARTIAL@@ 个窗口含不可用的邻居蛋白序列，共 @@EXCLUDED@@ 个位置被单独记为序列排除。它们仍占据原来的 CDS 位置，未被删除后重新编号。只有源记录明确标注环状且 CDS 足够多时才跨原点取邻居；不跨 contig 拼接。</p>
-<p>@@REVIEW@@ 个抽样窗口含接合 / exclusion 相关文字标记，单独保留为复核层；这只是对源注释文字的检查，未做新的功能推断。其余窗口的"未见文字标记"也不能证明相关功能不存在。中心的 SignalP、膜拓扑及 ESM 尚未在本次抽样阶段计算。</p>
+<p>@@PARTIAL@@ 个窗口含不可用的邻居蛋白序列，共 @@EXCLUDED@@ 个位置被单独记为序列排除。它们仍占据原来的 CDS 位置，未被删除后重新编号。@@CIRCULAR_POLICY@@ 不跨 contig 拼接。</p>
+<p>@@CONTEXT_REVIEW@@中心的 SignalP、膜拓扑及 ESM 尚未在本次抽样阶段计算。</p>
 <details><summary>20 个实际使用的组装</summary><div class="scroll"><table><thead><tr><th>组装编号</th><th>GTDB 属</th><th>GTDB 类</th><th>窗口数</th></tr></thead><tbody>@@GENOME_ROWS@@</tbody></table></div></details>
 </section><section id="atlas"><h2>全部 @@CASES@@ 个观察窗口</h2>
 <p>绿色中心；蓝灰色为有源功能描述的邻居；浅灰色为源功能未明。虚线边框表示蛋白序列不可用，金色边框与 ‡ 表示源注释文字需要复核。鼠标停在基因上可看完整 product、坐标和序列状态；箭头等宽表示 CDS 顺序，不代表物理长度。</p>
 <p class="muted">D/V = 对应架构位置的不同完整 aa 条数 / 有效出现次数；M/X = 不可见位置 / 序列排除次数。Copy = 一次抽样中心出现，不等于独立生物学样本。原始未知描述与 locus 标签保留。当前有 @@ARCH@@ 种源注释架构；本批尚未建立逐中心已知功能参考匹配。</p>
-<div class="toolbar"><label>属 <select id="genus"><option value="">全部</option></select></label><label>中心证据 <select id="evidence"><option value="">全部</option><option value="source_function_annotated">有功能描述</option><option value="source_function_uncharacterized">功能未明</option></select></label><label>文字复核 <select id="review"><option value="">全部</option><option value="true">有标记</option><option value="false">未见标记</option></select></label><input id="query" placeholder="窗口 / 基因 / product / 记录编号"><button id="prev">上一页</button><button id="next">下一页</button><span id="count" aria-live="polite"></span></div>
+<div class="toolbar"><label>属 <select id="genus"><option value="">全部</option></select></label><label>中心证据 <select id="evidence"><option value="">全部</option><option value="source_function_annotated">有功能描述</option><option value="source_function_uncharacterized">功能未明</option></select></label><label>文字复核 <select id="review"><option value="">全部</option>@@REVIEW_OPTIONS@@</select></label><input id="query" placeholder="窗口 / 基因 / product / 记录编号"><button id="prev">上一页</button><button id="next">下一页</button><span id="count" aria-live="polite"></span></div>
 <div id="cards"></div><noscript>图集需要 JavaScript；上方静态图与下方数据下载仍可用。</noscript></section>
-<section id="files"><h2>可重复运行的代码与数据</h2><p>入口脚本支持设置基因组数、每基因组中心数、长度范围及邻域宽度；下载缓存保留固定版本、原始注释、SHA256 和 GTDB 官方 MD5 校验。样本提取可从已下载的本地源文件独立重跑。</p>
+<section id="files"><h2>可重复运行的代码与数据</h2><p>入口脚本支持设置基因组数、每基因组中心数、长度范围及邻域宽度；@@CACHE_POLICY@@样本提取可从已下载的本地源文件独立重跑。</p>
 <div class="files"><a href="pipeline/run_pipeline.py">运行入口 · Python</a><a href="pipeline/README.md">使用说明与数据口径</a><a href="pipeline/extract_windows.py">邻域提取代码 · Python</a><a href="pipeline/test_extraction.py">坐标与注释边界测试</a>
 <a href="centers.tsv">中心序列、分类与证据表</a><a href="center_proteins.faa">400 个中心蛋白 · FASTA</a><a href="neighbors.tsv">全部邻居 CDS、原始标签及坐标</a><a href="window_proteins_unique.faa">窗口内去重的完整蛋白 · FASTA</a>
 <a href="windows.jsonl">完整窗口结构与序列 ID 映射</a><a href="architectures.json">架构 copies 与中心序列频率</a><a href="architecture_position_diversity.tsv">每个架构、每个位置的 D/V 与 M/X</a><a href="center_sampling_audit.tsv">中心筛选与抽样审计</a>

@@ -12,6 +12,22 @@ The background sampler is an independent directory inside this repository, not a
 Git submodule. Its records remain **unlabeled backgrounds**, not experimentally
 confirmed negatives. ESM inference and classifier training are not included.
 
+Existing GTDB R214 installations can use `--source local-r214` to read local
+metadata and Prodigal protein FASTAs without downloading anything. The original
+`ncbi-r232` mode remains the default. From the module directory, with the Python
+environment activated:
+
+```bash
+python run_pipeline.py --source local-r214 \
+  --metadata /path/to/bac120_metadata_r214.tsv \
+  --faa-root /path/to/protein_faa_reps \
+  --out results/r214_pilot --cache cache/r214
+```
+
+For Slurm, pass the same source arguments after `slurm_analyze.sbatch` and set
+`GTDB_OUT`/`GTDB_CACHE` to the preparation paths. A conda Python 3.11 environment
+is also supported: set `GTDB_PYTHON` to that environment's `bin/python`.
+
 ## Linux quick start
 
 ```bash
