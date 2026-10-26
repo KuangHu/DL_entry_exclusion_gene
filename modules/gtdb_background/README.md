@@ -20,6 +20,71 @@ python -m unittest discover -s . -p 'test_*.py' -v
 python run_pipeline.py --out results/pilot --cache cache/gtdb_r232
 ```
 
+## Two source modes
+
+`--source` selects where centers, neighbors and taxonomy come from. The default
+preserves the original pilot behavior; the alternative lets a cluster that already
+hosts GTDB R214 skip all downloads.
+
+| `--source` | Metadata | Center+neighbor source | Product/gene names | Needs network | Needs disk |
+|---|---|---|---|---|---|
+| `ncbi-r232` (default) | R232 bac120 (pinned URL + MD5) | NCBI RefSeq GBFF per selected accession | yes | yes (prepare only) | tens of MB |
+| `local-r214` | R214 `bac120_metadata_r214.tsv` from a staged release | GTDB R214 Prodigal `.faa` files | **no — Prodigal headers only** | no | zero (reads shared release in place) |
+
+### `local-r214` mode
+
+Point `--metadata` at `bac120_metadata_r214.tsv` and `--faa-root` at the directory
+holding `bacteria/` and `archaea/` Prodigal protein FASTAs. Both `GB_GCA_*` and
+`RS_GCF_*` representatives are accepted; the quality thresholds use CheckM (not
+CheckM2) completeness ≥95 and contamination ≤5. Each selected accession is matched
+once against the whole FAA directory; `2-GB_GCA_...` shard duplicates are hashed
+over the parsed Prodigal records and deduped if the biological content matches, or
+reported as `content_conflict` (status != downloaded) if it does not. There is no
+"pick one and hope"; conflicts stop the pipeline until a human resolves them.
+
+```bash
+python run_pipeline.py --source local-r214 \
+    --metadata /path/to/bac120_metadata_r214.tsv \
+    --faa-root /path/to/protein_faa_reps \
+    --out results/r214_pilot --cache cache/r214
+```
+
+Important differences from `ncbi-r232`:
+
+- Centers and ±flank neighbors are **Prodigal predictions**, not NCBI-annotated CDS;
+  the two sets are not identical. Don't compare case counts across modes as if they
+  were runs of the same pipeline.
+- `product` and `gene` are empty for every record; `source_unknown=True` always;
+  `source_annotation_review` on every case/audit row is `unavailable`. This is
+  distinct from "nothing matched" — the review was never possible. Treating absence
+  of a product name as evidence of EEX exclusion (positive or negative) is unsound.
+- Architectures still group by `(identity_label, relative_strand)`, but every token
+  is `unknown`, so distinct architectures reduce to distinct strand patterns.
+  `architectures.json` carries an explicit note: identical all-unknown patterns are
+  not evidence of a shared functional operon.
+- Circular wrap-around is **off**. R214 Prodigal FASTAs do not carry authoritative
+  topology; we never fabricate wrap behavior from an unverified companion assembly.
+  Linear-end centers are logged as `incomplete_CDS_window` and dropped from the
+  eligible pool.
+- Prodigal ordinals (`ID=1_1` etc.) are validated per contig for monotonic gap-free
+  order and recorded in `extraction_manifest.json → ordinal_warnings`. They are a
+  **consistency check only**; neighbor indexing uses the sorted `(start0, end0,
+  ordinal)` order exactly like the NCBI path, so partial / nonstandard / missing
+  translations keep their position.
+- Each extracted neighbor keeps the raw Prodigal flags: `prodigal_partial`
+  (`00`/`01`/`10`/`11`), `prodigal_start_type`, `prodigal_rbs_motif`,
+  `prodigal_ordinal`. Partial markers roll up into `sequence_status=partial_CDS`.
+- `validation.json` re-reads the raw `.faa` (not a GBFF) and asserts each window's
+  start/end/strand/sequence against the on-disk header + sequence. The report's
+  "complete record" claim is only as strong as the Prodigal call set — see the
+  limitations block.
+
+Validation run against the shared R214 release on 2026-10-26: 20 genomes × 20
+centers (18 phyla, mix of GB_GCA and RS_GCF representatives) → 400 cases, 289
+distinct architectures, 0 wrap-around cases, 0 Prodigal ordinal warnings, 6,000
+±7 positions reverified against the raw FAA. One center retained a
+`nonstandard_translation` neighbor in place without collapsing the index.
+
 The final atlas is `results/pilot/index.html`; copy the entire output directory
 when viewing it elsewhere, including its JavaScript and image files. Defaults
 are 20 genera, 20 centers per genome, 40–300 aa, ±7 CDS. A larger run can use
