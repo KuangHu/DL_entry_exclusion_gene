@@ -1,0 +1,19 @@
+name: Background sampler checks
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/gtdb_background
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: modules/gtdb_background/requirements.txt
+      - run: python -m pip install -r requirements.txt
+      - run: python -m unittest discover -s . -p 'test_*.py' -v
+      - run: python run_pipeline.py --help
+      - run: bash -n slurm_analyze.sbatch
