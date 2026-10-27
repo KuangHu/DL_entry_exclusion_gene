@@ -7,10 +7,11 @@ Components for exploratory analysis of entry-exclusion protein datasets.
 | Module | Purpose | Status |
 |---|---|---|
 | [gtdb_background](modules/gtdb_background/README.md) | Sample short proteins and their ±7 CDS genomic neighborhoods from GTDB-selected NCBI assemblies | CPU pipeline; Linux setup and Slurm template included |
+| [protein_embeddings](modules/protein_embeddings/README.md) | Reuse sequence-matched vectors, verify/download Atlas entries, infer missing ESM2-3B representations | Resumable GPU pipeline and Slurm template |
 
 The background sampler is an independent directory inside this repository, not a
 Git submodule. Its records remain **unlabeled backgrounds**, not experimentally
-confirmed negatives. ESM inference and classifier training are not included.
+confirmed negatives. Classifier training is not included.
 
 Existing GTDB R214 installations can use `--source local-r214` to read local
 metadata and Prodigal protein FASTAs without downloading anything. The original

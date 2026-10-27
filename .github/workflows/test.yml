@@ -17,3 +17,6 @@ jobs:
       - run: python -m unittest discover -s . -p 'test_*.py' -v
       - run: python run_pipeline.py --help
       - run: bash -n slurm_analyze.sbatch
+      - run: python -m unittest discover -s ../protein_embeddings -p 'test_*.py' -v
+      - run: python ../protein_embeddings/embed.py --help
+      - run: bash -n ../protein_embeddings/slurm_embed.sbatch

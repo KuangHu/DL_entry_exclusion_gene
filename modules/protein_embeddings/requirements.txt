@@ -1,0 +1,4 @@
+# Install a site-appropriate CUDA-enabled PyTorch >=2.1 separately.
+biopython==1.86
+numpy==2.4.6
+transformers==4.44.2
